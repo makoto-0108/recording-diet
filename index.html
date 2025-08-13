@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>レコーディングダイエットアプリ</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 700px;
+    margin: 20px auto;
+    padding: 10px;
+    background: #f9f9f9;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+    color: #2c3e50;
+  }
+  label {
+    display: block;
+    margin: 10px 0 5px;
+    font-weight: bold;
+  }
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  textarea {
+    width: 100%;
+    padding: 8px;
+    font-size: 1rem;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+  }
+  button {
+    margin-top: 10px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(52, 152, 219, 0.4);
+  }
+  .section {
+    background: white;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  ul.record-list {
+    list-style: none;
+    padding-left: 0;
+  }
+  ul.record-list li {
+    background: #e9f1f7;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    position: relative;
+  }
+  ul.record-list li button {
+    font-size: 0.9rem;
+    padding: 4px 8px;
+    position: absolute;
+    top: 10px;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+  }
+  ul.record-list li button.delete-btn {
+    background-color: #e74c3c;
+    right: 10px;
+  }
+  ul.record-list li button.edit-btn {
+    background-color: #f39c12;
+    right: 70px;
+  }
+  #copy-textarea {
+    width: 100%;
+    height: 120px;
+    margin-top: 10px;
+    resize: vertical;
+  }
+  #open-chatgpt {
+    background-color: #2ecc71;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<h1>レコーディングダイエット</h1>
+
+<div class="section">
+  <label for="date-input">日付を選択</label>
+  <input type="date" id="date-input" />
+
+  <label for="meal-input">食事内容</label>
+  <textarea id="meal-input" rows="3" placeholder="例: 卵かけご飯、味噌汁、サラダ"></textarea>
+
+  <label for="calorie-input">合計カロリー（kcal）</label>
+  <input type="number" id="calorie-input" placeholder="例: 550" />
+
+  <label for="memo-input">メモ（任意）</label>
+  <textarea id="memo-input" rows="2" placeholder="例: 疲れていて少なめにしました"></textarea>
+
+  <button id="add-record-btn">記録を追加</button>
+</div>
+
+<div class="section">
+  <h2>記録一覧</h2>
+  <ul id="record-list" class="record-list"></ul>
+</div>
+
+<div class="section">
+  <h2>まとめコピー用テキスト</h2>
+  <textarea id="copy-textarea" readonly placeholder="ここをコピーしてチャッピー（GPT）にペーストすると概算カロリーがわかります"></textarea>
+  <button id="copy-all-btn">全部コピー</button>
+  <button id="open-chatgpt">チャッピーにカロリーについて聞いてみる。</button>
+</div>
+
+<script>
+  const dateInput = document.getElementById('date-input');
+  const mealInput = document.getElementById('meal-input');
+  const calorieInput = document.getElementById('calorie-input');
+  const memoInput = document.getElementById('memo-input');
+  const addRecordBtn = document.getElementById('add-record-btn');
+  const recordList = document.getElementById('record-list');
+  const copyTextarea = document.getElementById('copy-textarea');
+  const copyAllBtn = document.getElementById('copy-all-btn');
+  const openChatGPTBtn = document.getElementById('open-chatgpt');
+
+  let records = [];
+  let editIndex = null;
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('ja-JP');
+  }
+
+  function renderRecords() {
+    recordList.innerHTML = '';
+    records.forEach((rec, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <strong>${formatDate(rec.date)}</strong><br/>
+        食事: ${rec.meal}<br/>
+        カロリー: ${rec.calorie ? rec.calorie + ' kcal' : '未入力'}<br/>
+        メモ: ${rec.memo || '-'}
+        <button class="edit-btn" data-index="${i}">編集</button>
+        <button class="delete-btn" data-index="${i}">削除</button>
+      `;
+      recordList.appendChild(li);
+    });
+    updateCopyText();
+  }
+
+  function updateCopyText() {
+    if(records.length === 0) {
+      copyTextarea.value = '';
+      return;
+    }
+    // 最新日付を取得（日付の降順ソート）
+    const sortedByDate = [...records].sort((a,b) => b.date.localeCompare(a.date));
+    const latestDate = sortedByDate[0].date;
+
+    // 最新日付の記録だけ抽出
+    const latestRecords = records.filter(r => r.date === latestDate);
+
+    // テキスト作成
+    let text = latestRecords.map(r => {
+      return `${formatDate(r.date)} 食事: ${r.meal} （${r.calorie ? r.calorie + ' kcal' : 'カロリー未入力'}） メモ: ${r.memo || '-'}`;
+    }).join('\n');
+
+    copyTextarea.value = text;
+  }
+
+  addRecordBtn.addEventListener('click', () => {
+    const dateVal = dateInput.value;
+    const mealVal = mealInput.value.trim();
+    const calorieVal = calorieInput.value.trim();
+    const memoVal = memoInput.value.trim();
+
+    if(!dateVal) {
+      alert('日付を選んでください');
+      return;
+    }
+    if(!mealVal) {
+      alert('食事内容を入力してください');
+      return;
+    }
+
+    if(editIndex !== null) {
+      // 編集中の場合
+      records[editIndex] = {
+        date: dateVal,
+        meal: mealVal,
+        calorie: calorieVal,
+        memo: memoVal
+      };
+      editIndex = null;
+      addRecordBtn.textContent = '記録を追加';
+    } else {
+      // 新規追加
+      records.push({
+        date: dateVal,
+        meal: mealVal,
+        calorie: calorieVal,
+        memo: memoVal
+      });
+    }
+
+    // 入力リセット
+    dateInput.value = '';
+    mealInput.value = '';
+    calorieInput.value = '';
+    memoInput.value = '';
+
+    renderRecords();
+  });
+
+  recordList.addEventListener('click', (e) => {
+    if(e.target.classList.contains('delete-btn')) {
+      const idx = e.target.dataset.index;
+      if(confirm('この記録を削除しますか？')) {
+        records.splice(idx, 1);
+        renderRecords();
+      }
+    } else if(e.target.classList.contains('edit-btn')) {
+      const idx = e.target.dataset.index;
+      const rec = records[idx];
+      dateInput.value = rec.date;
+      mealInput.value = rec.meal;
+      calorieInput.value = rec.calorie;
+      memoInput.value = rec.memo;
+      editIndex = idx;
+      addRecordBtn.textContent = '編集を保存';
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+  });
+
+  copyAllBtn.addEventListener('click', () => {
+    copyTextarea.select();
+    document.execCommand('copy');
+    alert('最新の日付の記録をコピーしました！');
+  });
+
+  openChatGPTBtn.addEventListener('click', () => {
+    window.open('https://chat.openai.com/', '_blank');
+  });
+
+  // 初期レンダー
+  renderRecords();
+</script>
+
+</body>
+</html>
