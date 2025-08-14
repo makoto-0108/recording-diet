@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>レコーディングダイエットアプリ</title>
+<title>レコーディングダイエットアプリ（体重付き）</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -98,7 +98,7 @@
 </head>
 <body>
 
-<h1>レコーディングダイエット</h1>
+<h1>レコーディングダイエット（体重付き）</h1>
 
 <div class="section">
   <label for="date-input">日付を選択</label>
@@ -109,6 +109,9 @@
 
   <label for="calorie-input">合計カロリー（kcal）</label>
   <input type="number" id="calorie-input" placeholder="例: 550" />
+
+  <label for="weight-input">体重（kg）</label>
+  <input type="number" step="0.1" id="weight-input" placeholder="例: 62.4" />
 
   <label for="memo-input">メモ（任意）</label>
   <textarea id="memo-input" rows="2" placeholder="例: 疲れていて少なめにしました"></textarea>
@@ -132,6 +135,7 @@
   const dateInput = document.getElementById('date-input');
   const mealInput = document.getElementById('meal-input');
   const calorieInput = document.getElementById('calorie-input');
+  const weightInput = document.getElementById('weight-input');
   const memoInput = document.getElementById('memo-input');
   const addRecordBtn = document.getElementById('add-record-btn');
   const recordList = document.getElementById('record-list');
@@ -142,12 +146,12 @@
   let records = [];
   let editIndex = null;
 
-  // --- 保存処理 ---
+  // 保存処理
   function saveRecords() {
     localStorage.setItem('dietRecords', JSON.stringify(records));
   }
 
-  // --- 読み込み処理 ---
+  // 読み込み処理
   const saved = localStorage.getItem('dietRecords');
   if (saved) {
     records = JSON.parse(saved);
@@ -167,6 +171,7 @@
         <strong>${formatDate(rec.date)}</strong><br/>
         食事: ${rec.meal}<br/>
         カロリー: ${rec.calorie ? rec.calorie + ' kcal' : '未入力'}<br/>
+        体重: ${rec.weight ? rec.weight + ' kg' : '未入力'}<br/>
         メモ: ${rec.memo || '-'}
         <button class="edit-btn" data-index="${i}">編集</button>
         <button class="delete-btn" data-index="${i}">削除</button>
@@ -185,7 +190,7 @@
     const latestDate = sortedByDate[0].date;
     const latestRecords = records.filter(r => r.date === latestDate);
     let text = latestRecords.map(r => {
-      return `${formatDate(r.date)} 食事: ${r.meal} （${r.calorie ? r.calorie + ' kcal' : 'カロリー未入力'}） メモ: ${r.memo || '-'}`;
+      return `${formatDate(r.date)} 食事: ${r.meal} （${r.calorie ? r.calorie + ' kcal' : 'カロリー未入力'}） 体重: ${r.weight ? r.weight + ' kg' : '未入力'} メモ: ${r.memo || '-'}`;
     }).join('\n');
     copyTextarea.value = text;
   }
@@ -194,14 +199,15 @@
     const dateVal = dateInput.value;
     const mealVal = mealInput.value.trim();
     const calorieVal = calorieInput.value.trim();
+    const weightVal = weightInput.value.trim();
     const memoVal = memoInput.value.trim();
 
     if(!dateVal) {
       alert('日付を選んでください');
       return;
     }
-    if(!mealVal) {
-      alert('食事内容を入力してください');
+    if(!mealVal && !weightVal) {
+      alert('食事または体重のどちらかは入力してください');
       return;
     }
 
@@ -210,6 +216,7 @@
         date: dateVal,
         meal: mealVal,
         calorie: calorieVal,
+        weight: weightVal,
         memo: memoVal
       };
       editIndex = null;
@@ -219,6 +226,7 @@
         date: dateVal,
         meal: mealVal,
         calorie: calorieVal,
+        weight: weightVal,
         memo: memoVal
       });
     }
@@ -228,6 +236,7 @@
     dateInput.value = '';
     mealInput.value = '';
     calorieInput.value = '';
+    weightInput.value = '';
     memoInput.value = '';
 
     renderRecords();
@@ -247,6 +256,7 @@
       dateInput.value = rec.date;
       mealInput.value = rec.meal;
       calorieInput.value = rec.calorie;
+      weightInput.value = rec.weight;
       memoInput.value = rec.memo;
       editIndex = idx;
       addRecordBtn.textContent = '編集を保存';
@@ -264,7 +274,6 @@
     window.open('https://chat.openai.com/', '_blank');
   });
 
-  // 初期表示
   renderRecords();
 </script>
 
