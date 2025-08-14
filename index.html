@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>レコーディングダイエットアプリ（体重付き）</title>
+<title>レコーディングダイエット（体重付き＋グラフ）</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -22,10 +22,7 @@
     margin: 10px 0 5px;
     font-weight: bold;
   }
-  input[type="text"],
-  input[type="number"],
-  input[type="date"],
-  textarea {
+  input, textarea {
     width: 100%;
     padding: 8px;
     font-size: 1rem;
@@ -98,7 +95,7 @@
 </head>
 <body>
 
-<h1>レコーディングダイエット（体重付き）</h1>
+<h1>レコーディングダイエット（体重付き＋グラフ）</h1>
 
 <div class="section">
   <label for="date-input">日付を選択</label>
@@ -125,12 +122,18 @@
 </div>
 
 <div class="section">
+  <h2>体重推移グラフ</h2>
+  <canvas id="weightChart" height="200"></canvas>
+</div>
+
+<div class="section">
   <h2>まとめコピー用テキスト</h2>
   <textarea id="copy-textarea" readonly placeholder="ここをコピーしてチャッピー（ChatGPT）にペーストすると概算カロリーがわかります"></textarea>
   <button id="copy-all-btn">全部コピー</button>
   <button id="open-chatgpt">チャッピーにカロリーについて聞いてみる。</button>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   const dateInput = document.getElementById('date-input');
   const mealInput = document.getElementById('meal-input');
@@ -142,16 +145,16 @@
   const copyTextarea = document.getElementById('copy-textarea');
   const copyAllBtn = document.getElementById('copy-all-btn');
   const openChatGPTBtn = document.getElementById('open-chatgpt');
+  const ctx = document.getElementById('weightChart').getContext('2d');
 
   let records = [];
   let editIndex = null;
+  let chart;
 
-  // 保存処理
   function saveRecords() {
     localStorage.setItem('dietRecords', JSON.stringify(records));
   }
 
-  // 読み込み処理
   const saved = localStorage.getItem('dietRecords');
   if (saved) {
     records = JSON.parse(saved);
@@ -179,6 +182,7 @@
       recordList.appendChild(li);
     });
     updateCopyText();
+    updateChart();
   }
 
   function updateCopyText() {
@@ -193,6 +197,47 @@
       return `${formatDate(r.date)} 食事: ${r.meal} （${r.calorie ? r.calorie + ' kcal' : 'カロリー未入力'}） 体重: ${r.weight ? r.weight + ' kg' : '未入力'} メモ: ${r.memo || '-'}`;
     }).join('\n');
     copyTextarea.value = text;
+  }
+
+  function updateChart() {
+    const dateMap = {};
+    records.forEach(r => {
+      if (r.weight) {
+        if (!dateMap[r.date] || new Date(r.date) > new Date(dateMap[r.date].time)) {
+          dateMap[r.date] = {weight: parseFloat(r.weight), time: r.date};
+        }
+      }
+    });
+
+    const sortedDates = Object.keys(dateMap).sort((a,b) => new Date(a) - new Date(b));
+    const labels = sortedDates.map(d => formatDate(d));
+    const weights = sortedDates.map(d => dateMap[d].weight);
+
+    if(chart) {
+      chart.destroy();
+    }
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '体重 (kg)',
+          data: weights,
+          borderColor: '#3498db',
+          backgroundColor: 'rgba(52, 152, 219, 0.2)',
+          fill: true,
+          tension: 0.1
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: false
+          }
+        }
+      }
+    });
   }
 
   addRecordBtn.addEventListener('click', () => {
