@@ -142,6 +142,17 @@
   let records = [];
   let editIndex = null;
 
+  // --- 保存処理 ---
+  function saveRecords() {
+    localStorage.setItem('dietRecords', JSON.stringify(records));
+  }
+
+  // --- 読み込み処理 ---
+  const saved = localStorage.getItem('dietRecords');
+  if (saved) {
+    records = JSON.parse(saved);
+  }
+
   function formatDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -170,18 +181,12 @@
       copyTextarea.value = '';
       return;
     }
-    // 最新日付を取得（日付の降順ソート）
     const sortedByDate = [...records].sort((a,b) => b.date.localeCompare(a.date));
     const latestDate = sortedByDate[0].date;
-
-    // 最新日付の記録だけ抽出
     const latestRecords = records.filter(r => r.date === latestDate);
-
-    // テキスト作成
     let text = latestRecords.map(r => {
       return `${formatDate(r.date)} 食事: ${r.meal} （${r.calorie ? r.calorie + ' kcal' : 'カロリー未入力'}） メモ: ${r.memo || '-'}`;
     }).join('\n');
-
     copyTextarea.value = text;
   }
 
@@ -201,7 +206,6 @@
     }
 
     if(editIndex !== null) {
-      // 編集中の場合
       records[editIndex] = {
         date: dateVal,
         meal: mealVal,
@@ -211,7 +215,6 @@
       editIndex = null;
       addRecordBtn.textContent = '記録を追加';
     } else {
-      // 新規追加
       records.push({
         date: dateVal,
         meal: mealVal,
@@ -220,7 +223,8 @@
       });
     }
 
-    // 入力リセット
+    saveRecords();
+
     dateInput.value = '';
     mealInput.value = '';
     calorieInput.value = '';
@@ -234,6 +238,7 @@
       const idx = e.target.dataset.index;
       if(confirm('この記録を削除しますか？')) {
         records.splice(idx, 1);
+        saveRecords();
         renderRecords();
       }
     } else if(e.target.classList.contains('edit-btn')) {
@@ -259,7 +264,7 @@
     window.open('https://chat.openai.com/', '_blank');
   });
 
-  // 初期レンダー
+  // 初期表示
   renderRecords();
 </script>
 
