@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>レコーディングダイエット（体重＋消費カロリー付き）</title>
+<title>レコーディングダイエット</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -95,7 +95,7 @@
 </head>
 <body>
 
-<h1>レコーディングダイエット（体重＋消費カロリー）</h1>
+<h1>レコーディングダイエット</h1>
 
 <div class="section">
   <label for="date-input">日付を選択</label>
@@ -117,6 +117,11 @@
   <textarea id="memo-input" rows="2" placeholder="例: 疲れていて少なめにしました"></textarea>
 
   <button id="add-record-btn">記録を追加</button>
+</div>
+
+<div class="section">
+  <label for="filter-date">日付で表示</label>
+  <input type="date" id="filter-date">
 </div>
 
 <div class="section">
@@ -149,6 +154,7 @@
   const copyTextarea = document.getElementById('copy-textarea');
   const copyAllBtn = document.getElementById('copy-all-btn');
   const openChatGPTBtn = document.getElementById('open-chatgpt');
+  const filterDateInput = document.getElementById('filter-date');
   const ctx = document.getElementById('weightChart').getContext('2d');
 
   let records = [];
@@ -170,9 +176,10 @@
     return d.toLocaleDateString('ja-JP');
   }
 
-  function renderRecords() {
+  function renderRecords(filterDate = '') {
     recordList.innerHTML = '';
-    records.forEach((rec, i) => {
+    const filtered = filterDate ? records.filter(r => r.date === filterDate) : records;
+    filtered.forEach((rec, i) => {
       const li = document.createElement('li');
       li.innerHTML = `
         <strong>${formatDate(rec.date)}</strong><br/>
@@ -186,18 +193,18 @@
       `;
       recordList.appendChild(li);
     });
-    updateCopyText();
-    updateChart();
+    updateCopyText(filtered);
+    updateChart(filtered);
   }
 
-  function updateCopyText() {
-    if(records.length === 0) {
+  function updateCopyText(data) {
+    if(data.length === 0) {
       copyTextarea.value = '';
       return;
     }
-    const sortedByDate = [...records].sort((a,b) => b.date.localeCompare(a.date));
+    const sortedByDate = [...data].sort((a,b) => b.date.localeCompare(a.date));
     const latestDate = sortedByDate[0].date;
-    const latestRecords = records.filter(r => r.date === latestDate);
+    const latestRecords = data.filter(r => r.date === latestDate);
     let text = latestRecords.map(r => {
       return `${formatDate(r.date)} 食事: ${r.meal} (${r.calorie ? r.calorie + ' kcal' : 'カロリー未入力'})` +
              `${r.burncal ? ' 消費: ' + r.burncal + ' kcal' : ''} 体重: ${r.weight ? r.weight + ' kg' : '未入力'} メモ: ${r.memo || '-'}`;
@@ -205,9 +212,9 @@
     copyTextarea.value = text;
   }
 
-  function updateChart() {
+  function updateChart(data) {
     const dateMap = {};
-    records.forEach(r => {
+    data.forEach(r => {
       if (r.weight) {
         if (!dateMap[r.date] || new Date(r.date) > new Date(dateMap[r.date].time)) {
           dateMap[r.date] = {weight: parseFloat(r.weight), time: r.date};
@@ -259,13 +266,13 @@
 
     saveRecords();
     dateInput.value = ''; mealInput.value = ''; calorieInput.value = ''; burncalInput.value = ''; weightInput.value = ''; memoInput.value = '';
-    renderRecords();
+    renderRecords(filterDateInput.value);
   });
 
   recordList.addEventListener('click', (e) => {
     if(e.target.classList.contains('delete-btn')) {
       const idx = e.target.dataset.index;
-      if(confirm('この記録を削除しますか？')) { records.splice(idx, 1); saveRecords(); renderRecords(); }
+      if(confirm('この記録を削除しますか？')) { records.splice(idx, 1); saveRecords(); renderRecords(filterDateInput.value); }
     } else if(e.target.classList.contains('edit-btn')) {
       const idx = e.target.dataset.index;
       const rec = records[idx];
@@ -285,6 +292,10 @@
 
   openChatGPTBtn.addEventListener('click', () => {
     window.open('https://chat.openai.com/', '_blank');
+  });
+
+  filterDateInput.addEventListener('change', () => {
+    renderRecords(filterDateInput.value);
   });
 
   renderRecords();
