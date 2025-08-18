@@ -15,15 +15,18 @@
   }
   h1 {
     text-align: center;
-    color: #3498db; /* ボタンと同じ色に統一 */
+    color: #3498db; /* ボタン色と統一 */
   }
   .intro {
     background: #eaf2fb;
-    border-left: 5px solid #3498db;
-    padding: 15px;
-    margin-bottom: 20px;
+    padding: 10px;
     border-radius: 8px;
-    line-height: 1.6;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .intro p {
+    margin: 5px 0 0;
+    font-size: 1rem;
   }
   label {
     display: block;
@@ -106,11 +109,19 @@
 <h1>レコーディングダイエット</h1>
 
 <div class="intro">
-🎉 使い方は簡単！<br>
-今日の食事・カロリー・消費カロリー・体重を入力<br>
-「まとめコピー」ボタンでデータをコピー<br>
-ChatGPTに貼り付けて「カロリー合計を教えて！」と送信<br>
-今日の摂取量や代謝との差もすぐチェックできます✨
+  <p>🎉 使い方は簡単！</p>
+  <p>今日の食事・カロリー・消費カロリー・体重を入力</p>
+  <p>「まとめコピー」ボタンでデータをコピー</p>
+  <p>ChatGPTに貼り付けて「カロリー合計を教えて！」と送信</p>
+  <p>今日の摂取量や代謝との差もすぐチェックできます✨</p>
+</div>
+
+<!-- 今日のカロリー差表示 -->
+<div class="section" id="calorie-diff-section" style="text-align:center; background:#eaf2fb; padding:10px; border-radius:8px; margin-bottom:20px;">
+  <h2 style="margin:0; font-size:1.2rem; color:#3498db;">今日の摂取・代謝差</h2>
+  <p id="calorie-diff" style="margin:5px 0 0; font-size:1rem;">
+    今日の摂取カロリーと基礎代謝との差をここに表示
+  </p>
 </div>
 
 <div class="section">
@@ -152,7 +163,7 @@ ChatGPTに貼り付けて「カロリー合計を教えて！」と送信<br>
 
 <div class="section">
   <h2>まとめコピー用テキスト</h2>
-  <textarea id="copy-textarea" readonly placeholder="ここをコピーしてChatGPTにペーストすると概算カロリーがわかります"></textarea>
+  <textarea id="copy-textarea" readonly placeholder="ここをコピーしてチャッピー（ChatGPT）にペーストすると概算カロリーがわかります"></textarea>
   <button id="copy-all-btn">全部コピー</button>
   <button id="open-chatgpt">チャッピーにカロリーについて聞いてみる。</button>
 </div>
@@ -172,6 +183,8 @@ ChatGPTに貼り付けて「カロリー合計を教えて！」と送信<br>
   const openChatGPTBtn = document.getElementById('open-chatgpt');
   const filterDateInput = document.getElementById('filter-date');
   const ctx = document.getElementById('weightChart').getContext('2d');
+  const calorieDiffElem = document.getElementById('calorie-diff');
+  const BASAL_METABOLISM = 1200;
 
   let records = [];
   let editIndex = null;
@@ -182,9 +195,7 @@ ChatGPTに貼り付けて「カロリー合計を教えて！」と送信<br>
   }
 
   const saved = localStorage.getItem('dietRecords');
-  if (saved) {
-    records = JSON.parse(saved);
-  }
+  if (saved) { records = JSON.parse(saved); }
 
   function formatDate(dateStr) {
     if (!dateStr) return '';
@@ -211,13 +222,11 @@ ChatGPTに貼り付けて「カロリー合計を教えて！」と送信<br>
     });
     updateCopyText(filtered);
     updateChart(filtered);
+    updateCalorieDiff();
   }
 
   function updateCopyText(data) {
-    if(data.length === 0) {
-      copyTextarea.value = '';
-      return;
-    }
+    if(data.length === 0) { copyTextarea.value = ''; return; }
     const sortedByDate = [...data].sort((a,b) => b.date.localeCompare(a.date));
     const latestDate = sortedByDate[0].date;
     const latestRecords = data.filter(r => r.date === latestDate);
@@ -230,13 +239,11 @@ ChatGPTに貼り付けて「カロリー合計を教えて！」と送信<br>
 
   function updateChart(data) {
     const dateMap = {};
-    data.forEach(r => {
-      if (r.weight) {
-        if (!dateMap[r.date] || new Date(r.date) > new Date(dateMap[r.date].time)) {
-          dateMap[r.date] = {weight: parseFloat(r.weight), time: r.date};
-        }
+    data.forEach(r => { if (r.weight) {
+      if (!dateMap[r.date] || new Date(r.date) > new Date(dateMap[r.date].time)) {
+        dateMap[r.date] = {weight: parseFloat(r.weight), time: r.date};
       }
-    });
+    }});
     const sortedDates = Object.keys(dateMap).sort((a,b) => new Date(a) - new Date(b));
     const labels = sortedDates.map(d => formatDate(d));
     const weights = sortedDates.map(d => dateMap[d].weight);
@@ -254,11 +261,20 @@ ChatGPTに貼り付けて「カロリー合計を教えて！」と送信<br>
           tension: 0.1
         }]
       },
-      options: {
-        responsive: true,
-        scales: { y: { beginAtZero: false } }
-      }
+      options: { responsive: true, scales: { y: { beginAtZero: false } } }
     });
+  }
+
+  function updateCalorieDiff() {
+    const today = new Date().toISOString().slice(0,10);
+    const todayRecords = records.filter(r => r.date === today);
+    const totalIntake = todayRecords.reduce((sum, r) => sum + (parseFloat(r.calorie)||0), 0);
+    const totalBurn = todayRecords.reduce((sum, r) => sum + (parseFloat(r.burncal)||0), 0);
+    const diff = totalIntake - totalBurn - BASAL_METABOLISM;
+
+    let arrow = diff > 0 ? '↑' : '↓';
+    calorieDiffElem.textContent = `今日の摂取カロリーと基礎代謝との差: ${diff} kcal ${arrow}`;
+    calorieDiffElem.style.color = diff > 0 ? 'red' : 'green';
   }
 
   addRecordBtn.addEventListener('click', () => {
@@ -276,46 +292,3 @@ ChatGPTに貼り付けて「カロリー合計を教えて！」と送信<br>
       records[editIndex] = {date: dateVal, meal: mealVal, calorie: calorieVal, burncal: burncalVal, weight: weightVal, memo: memoVal};
       editIndex = null;
       addRecordBtn.textContent = '記録を追加';
-    } else {
-      records.push({date: dateVal, meal: mealVal, calorie: calorieVal, burncal: burncalVal, weight: weightVal, memo: memoVal});
-    }
-
-    saveRecords();
-    dateInput.value = ''; mealInput.value = ''; calorieInput.value = ''; burncalInput.value = ''; weightInput.value = ''; memoInput.value = '';
-    renderRecords(filterDateInput.value);
-  });
-
-  recordList.addEventListener('click', (e) => {
-    if(e.target.classList.contains('delete-btn')) {
-      const idx = e.target.dataset.index;
-      if(confirm('この記録を削除しますか？')) { records.splice(idx, 1); saveRecords(); renderRecords(filterDateInput.value); }
-    } else if(e.target.classList.contains('edit-btn')) {
-      const idx = e.target.dataset.index;
-      const rec = records[idx];
-      dateInput.value = rec.date; mealInput.value = rec.meal; calorieInput.value = rec.calorie;
-      burncalInput.value = rec.burncal; weightInput.value = rec.weight; memoInput.value = rec.memo;
-      editIndex = idx;
-      addRecordBtn.textContent = '編集を保存';
-      window.scrollTo({top: 0, behavior: 'smooth'});
-    }
-  });
-
-  copyAllBtn.addEventListener('click', () => {
-    copyTextarea.select();
-    document.execCommand('copy');
-    alert('最新の日付の記録をコピーしました！');
-  });
-
-  openChatGPTBtn.addEventListener('click', () => {
-    window.open('https://chat.openai.com/', '_blank');
-  });
-
-  filterDateInput.addEventListener('change', () => {
-    renderRecords(filterDateInput.value);
-  });
-
-  renderRecords();
-</script>
-
-</body>
-</html>
