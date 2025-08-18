@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>レコーディングダイエット</title>
 <style>
-  :root {
-    --main-color: #3498db; /* ボタンと見出しの共通色 */
-  }
   body {
     font-family: Arial, sans-serif;
     max-width: 700px;
@@ -18,7 +15,15 @@
   }
   h1 {
     text-align: center;
-    color: var(--main-color);
+    color: #3498db; /* ボタンと同じ色に統一 */
+  }
+  .intro {
+    background: #eaf2fb;
+    border-left: 5px solid #3498db;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    line-height: 1.6;
   }
   label {
     display: block;
@@ -35,7 +40,7 @@
   }
   button {
     margin-top: 10px;
-    background-color: var(--main-color);
+    background-color: #3498db;
     color: white;
     border: none;
     padding: 10px 15px;
@@ -100,9 +105,12 @@
 
 <h1>レコーディングダイエット</h1>
 
-<div class="section">
-  <label for="basal-input">基礎代謝（kcal）</label>
-  <input type="number" id="basal-input" placeholder="例: 1200">
+<div class="intro">
+🎉 使い方は簡単！<br>
+今日の食事・カロリー・消費カロリー・体重を入力<br>
+「まとめコピー」ボタンでデータをコピー<br>
+ChatGPTに貼り付けて「カロリー合計を教えて！」と送信<br>
+今日の摂取量や代謝との差もすぐチェックできます✨
 </div>
 
 <div class="section">
@@ -144,176 +152,170 @@
 
 <div class="section">
   <h2>まとめコピー用テキスト</h2>
-  <textarea id="copy-textarea" readonly placeholder="ここをコピーしてチャッピー（ChatGPT）にペーストすると概算カロリーがわかります"></textarea>
+  <textarea id="copy-textarea" readonly placeholder="ここをコピーしてChatGPTにペーストすると概算カロリーがわかります"></textarea>
   <button id="copy-all-btn">全部コピー</button>
   <button id="open-chatgpt">チャッピーにカロリーについて聞いてみる。</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const dateInput = document.getElementById('date-input');
-const mealInput = document.getElementById('meal-input');
-const calorieInput = document.getElementById('calorie-input');
-const burncalInput = document.getElementById('burncal-input');
-const weightInput = document.getElementById('weight-input');
-const memoInput = document.getElementById('memo-input');
-const addRecordBtn = document.getElementById('add-record-btn');
-const recordList = document.getElementById('record-list');
-const copyTextarea = document.getElementById('copy-textarea');
-const copyAllBtn = document.getElementById('copy-all-btn');
-const openChatGPTBtn = document.getElementById('open-chatgpt');
-const filterDateInput = document.getElementById('filter-date');
-const basalInput = document.getElementById('basal-input');
-const ctx = document.getElementById('weightChart').getContext('2d');
+  const dateInput = document.getElementById('date-input');
+  const mealInput = document.getElementById('meal-input');
+  const calorieInput = document.getElementById('calorie-input');
+  const burncalInput = document.getElementById('burncal-input');
+  const weightInput = document.getElementById('weight-input');
+  const memoInput = document.getElementById('memo-input');
+  const addRecordBtn = document.getElementById('add-record-btn');
+  const recordList = document.getElementById('record-list');
+  const copyTextarea = document.getElementById('copy-textarea');
+  const copyAllBtn = document.getElementById('copy-all-btn');
+  const openChatGPTBtn = document.getElementById('open-chatgpt');
+  const filterDateInput = document.getElementById('filter-date');
+  const ctx = document.getElementById('weightChart').getContext('2d');
 
-let records = [];
-let editIndex = null;
-let chart;
+  let records = [];
+  let editIndex = null;
+  let chart;
 
-// ローカルストレージから復元
-const savedRecords = localStorage.getItem('dietRecords');
-if (savedRecords) records = JSON.parse(savedRecords);
-
-const savedBasal = localStorage.getItem('basalMetabolism');
-if (savedBasal) basalInput.value = savedBasal;
-
-function saveRecords() {
-  localStorage.setItem('dietRecords', JSON.stringify(records));
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('ja-JP');
-}
-
-function renderRecords(filterDate = '') {
-  recordList.innerHTML = '';
-  const filtered = filterDate ? records.filter(r => r.date === filterDate) : records;
-
-  const userBasal = basalInput.value ? parseFloat(basalInput.value) : 1200;
-
-  filtered.forEach((rec, i) => {
-    const li = document.createElement('li');
-
-    const intake = rec.calorie ? parseFloat(rec.calorie) : 0;
-    const burn = rec.burncal ? parseFloat(rec.burncal) : 0;
-    const net = intake - (userBasal + burn);
-
-    let netDisplay = '';
-    if (net > 0) {
-      netDisplay = `<span style="color:red;">+${net} kcal</span>`;
-    } else if (net < 0) {
-      netDisplay = `<span style="color:green;">${net} kcal</span>`;
-    } else {
-      netDisplay = `<span>${net} kcal</span>`;
-    }
-
-    li.innerHTML = `
-      <strong>${formatDate(rec.date)}</strong><br/>
-      食事: ${rec.meal}<br/>
-      カロリー: ${rec.calorie ? rec.calorie + ' kcal' : '未入力'}<br/>
-      消費: ${rec.burncal ? rec.burncal + ' kcal' : '-'}<br/>
-      体重: ${rec.weight ? rec.weight + ' kg' : '未入力'}<br/>
-      摂取－代謝＋消費: ${netDisplay}<br/>
-      メモ: ${rec.memo || '-'}
-      <button class="edit-btn" data-index="${i}">編集</button>
-      <button class="delete-btn" data-index="${i}">削除</button>
-    `;
-    recordList.appendChild(li);
-  });
-
-  updateCopyText(filtered);
-  updateChart(filtered);
-}
-
-function updateCopyText(data) {
-  if(data.length === 0) {
-    copyTextarea.value = '';
-    return;
+  function saveRecords() {
+    localStorage.setItem('dietRecords', JSON.stringify(records));
   }
-  const sortedByDate = [...data].sort((a,b) => b.date.localeCompare(a.date));
-  const latestDate = sortedByDate[0].date;
-  const latestRecords = data.filter(r => r.date === latestDate);
-  copyTextarea.value = latestRecords.map(r => {
-    return `${formatDate(r.date)} 食事: ${r.meal} (${r.calorie ? r.calorie + ' kcal' : 'カロリー未入力'})` +
-           `${r.burncal ? ' 消費: ' + r.burncal + ' kcal' : ''} 体重: ${r.weight ? r.weight + ' kg' : '未入力'} メモ: ${r.memo || '-'}`;
-  }).join('\n');
-}
 
-function updateChart(data) {
-  const dateMap = {};
-  data.forEach(r => {
-    if (r.weight) {
-      if (!dateMap[r.date] || new Date(r.date) > new Date(dateMap[r.date].time)) {
-        dateMap[r.date] = {weight: parseFloat(r.weight), time: r.date};
+  const saved = localStorage.getItem('dietRecords');
+  if (saved) {
+    records = JSON.parse(saved);
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('ja-JP');
+  }
+
+  function renderRecords(filterDate = '') {
+    recordList.innerHTML = '';
+    const filtered = filterDate ? records.filter(r => r.date === filterDate) : records;
+    filtered.forEach((rec, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <strong>${formatDate(rec.date)}</strong><br/>
+        食事: ${rec.meal}<br/>
+        カロリー: ${rec.calorie ? rec.calorie + ' kcal' : '未入力'}<br/>
+        消費: ${rec.burncal ? rec.burncal + ' kcal' : '-'}<br/>
+        体重: ${rec.weight ? rec.weight + ' kg' : '未入力'}<br/>
+        メモ: ${rec.memo || '-'}
+        <button class="edit-btn" data-index="${i}">編集</button>
+        <button class="delete-btn" data-index="${i}">削除</button>
+      `;
+      recordList.appendChild(li);
+    });
+    updateCopyText(filtered);
+    updateChart(filtered);
+  }
+
+  function updateCopyText(data) {
+    if(data.length === 0) {
+      copyTextarea.value = '';
+      return;
+    }
+    const sortedByDate = [...data].sort((a,b) => b.date.localeCompare(a.date));
+    const latestDate = sortedByDate[0].date;
+    const latestRecords = data.filter(r => r.date === latestDate);
+    let text = latestRecords.map(r => {
+      return `${formatDate(r.date)} 食事: ${r.meal} (${r.calorie ? r.calorie + ' kcal' : 'カロリー未入力'})` +
+             `${r.burncal ? ' 消費: ' + r.burncal + ' kcal' : ''} 体重: ${r.weight ? r.weight + ' kg' : '未入力'} メモ: ${r.memo || '-'}`;
+    }).join('\n');
+    copyTextarea.value = text;
+  }
+
+  function updateChart(data) {
+    const dateMap = {};
+    data.forEach(r => {
+      if (r.weight) {
+        if (!dateMap[r.date] || new Date(r.date) > new Date(dateMap[r.date].time)) {
+          dateMap[r.date] = {weight: parseFloat(r.weight), time: r.date};
+        }
       }
-    }
-  });
-  const sortedDates = Object.keys(dateMap).sort((a,b) => new Date(a) - new Date(b));
-  const labels = sortedDates.map(d => formatDate(d));
-  const weights = sortedDates.map(d => dateMap[d].weight);
-  if(chart) chart.destroy();
-  chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: '体重 (kg)',
-        data: weights,
-        borderColor: 'var(--main-color)',
-        backgroundColor: 'rgba(52, 152, 219, 0.2)',
-        fill: true,
-        tension: 0.1
-      }]
-    },
-    options: {
-      responsive: true,
-      scales: { y: { beginAtZero: false } }
-    }
-  });
-}
-
-addRecordBtn.addEventListener('click', () => {
-  const dateVal = dateInput.value;
-  const mealVal = mealInput.value.trim();
-  const calorieVal = calorieInput.value.trim();
-  const burncalVal = burncalInput.value.trim();
-  const weightVal = weightInput.value.trim();
-  const memoVal = memoInput.value.trim();
-
-  if(!dateVal) { alert('日付を選んでください'); return; }
-  if(!mealVal && !weightVal) { alert('食事または体重のどちらかは入力してください'); return; }
-
-  if(editIndex !== null) {
-    records[editIndex] = {date: dateVal, meal: mealVal, calorie: calorieVal, burncal: burncalVal, weight: weightVal, memo: memoVal};
-    editIndex = null;
-    addRecordBtn.textContent = '記録を追加';
-  } else {
-    records.push({date: dateVal, meal: mealVal, calorie: calorieVal, burncal: burncalVal, weight: weightVal, memo: memoVal});
+    });
+    const sortedDates = Object.keys(dateMap).sort((a,b) => new Date(a) - new Date(b));
+    const labels = sortedDates.map(d => formatDate(d));
+    const weights = sortedDates.map(d => dateMap[d].weight);
+    if(chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '体重 (kg)',
+          data: weights,
+          borderColor: '#3498db',
+          backgroundColor: 'rgba(52, 152, 219, 0.2)',
+          fill: true,
+          tension: 0.1
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: false } }
+      }
+    });
   }
 
-  saveRecords();
-  dateInput.value = ''; mealInput.value = ''; calorieInput.value = ''; burncalInput.value = ''; weightInput.value = ''; memoInput.value = '';
-  renderRecords(filterDateInput.value);
-});
+  addRecordBtn.addEventListener('click', () => {
+    const dateVal = dateInput.value;
+    const mealVal = mealInput.value.trim();
+    const calorieVal = calorieInput.value.trim();
+    const burncalVal = burncalInput.value.trim();
+    const weightVal = weightInput.value.trim();
+    const memoVal = memoInput.value.trim();
 
-recordList.addEventListener('click', (e) => {
-  if(e.target.classList.contains('delete-btn')) {
-    const idx = e.target.dataset.index;
-    if(confirm('この記録を削除しますか？')) { records.splice(idx, 1); saveRecords(); renderRecords(filterDateInput.value); }
-  } else if(e.target.classList.contains('edit-btn')) {
-    const idx = e.target.dataset.index;
-    const rec = records[idx];
-    dateInput.value = rec.date; mealInput.value = rec.meal; calorieInput.value = rec.calorie;
-    burncalInput.value = rec.burncal; weightInput.value = rec.weight; memoInput.value = rec.memo;
-    editIndex = idx;
-    addRecordBtn.textContent = '編集を保存';
-    window.scrollTo({top: 0, behavior: 'smooth'});
-  }
-});
+    if(!dateVal) { alert('日付を選んでください'); return; }
+    if(!mealVal && !weightVal) { alert('食事または体重のどちらかは入力してください'); return; }
 
-copyAllBtn.addEventListener('click', () => {
-  copyTextarea.select();
-  document.execCommand('copy');
-  alert('最新の日付の記録をコピーしました！
+    if(editIndex !== null) {
+      records[editIndex] = {date: dateVal, meal: mealVal, calorie: calorieVal, burncal: burncalVal, weight: weightVal, memo: memoVal};
+      editIndex = null;
+      addRecordBtn.textContent = '記録を追加';
+    } else {
+      records.push({date: dateVal, meal: mealVal, calorie: calorieVal, burncal: burncalVal, weight: weightVal, memo: memoVal});
+    }
+
+    saveRecords();
+    dateInput.value = ''; mealInput.value = ''; calorieInput.value = ''; burncalInput.value = ''; weightInput.value = ''; memoInput.value = '';
+    renderRecords(filterDateInput.value);
+  });
+
+  recordList.addEventListener('click', (e) => {
+    if(e.target.classList.contains('delete-btn')) {
+      const idx = e.target.dataset.index;
+      if(confirm('この記録を削除しますか？')) { records.splice(idx, 1); saveRecords(); renderRecords(filterDateInput.value); }
+    } else if(e.target.classList.contains('edit-btn')) {
+      const idx = e.target.dataset.index;
+      const rec = records[idx];
+      dateInput.value = rec.date; mealInput.value = rec.meal; calorieInput.value = rec.calorie;
+      burncalInput.value = rec.burncal; weightInput.value = rec.weight; memoInput.value = rec.memo;
+      editIndex = idx;
+      addRecordBtn.textContent = '編集を保存';
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+  });
+
+  copyAllBtn.addEventListener('click', () => {
+    copyTextarea.select();
+    document.execCommand('copy');
+    alert('最新の日付の記録をコピーしました！');
+  });
+
+  openChatGPTBtn.addEventListener('click', () => {
+    window.open('https://chat.openai.com/', '_blank');
+  });
+
+  filterDateInput.addEventListener('change', () => {
+    renderRecords(filterDateInput.value);
+  });
+
+  renderRecords();
+</script>
+
+</body>
+</html>
