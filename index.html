@@ -86,7 +86,7 @@
 
 <div class="intro">
   <p>🎉 使い方は簡単！</p>
-  <p>今日の食事・カロリー・消費カロリー・体重を入力</p>
+  <p>今日の食事・カロリー・消費カロリー・体重・基礎代謝を入力</p>
   <p>「まとめコピー」ボタンでデータをコピー</p>
   <p>ChatGPTに貼り付けて「カロリー合計を教えて！」と送信</p>
   <p>今日の摂取量や代謝との差もすぐチェックできます✨</p>
@@ -95,11 +95,15 @@
 <div class="section" id="calorie-diff-section" style="text-align:center; background:#eaf2fb; padding:10px; border-radius:8px; margin-bottom:20px;">
   <h2 style="margin:0; font-size:1.2rem; color:#3498db;">今日の摂取・代謝差</h2>
   <p id="calorie-diff" style="margin:5px 0 0; font-size:1rem;">今日の摂取カロリーと基礎代謝との差をここに表示</p>
+  <canvas id="calorieDiffChart" height="200" style="margin-top:10px;"></canvas>
 </div>
 
 <div class="section">
   <label for="date-input">日付を選択</label>
   <input type="date" id="date-input" />
+
+  <label for="bmr-input">基礎代謝（kcal）</label>
+  <input type="number" id="bmr-input" placeholder="例: 1500" />
 
   <label for="meal-input">食事内容</label>
   <textarea id="meal-input" rows="3" placeholder="例: 卵かけご飯、味噌汁、サラダ"></textarea>
@@ -136,14 +140,15 @@
 
 <div class="section">
   <h2>まとめコピー用テキスト</h2>
-  <textarea id="copy-textarea" readonly placeholder="ここをコピーしてチャッピー（ChatGPT）にペーストすると概算カロリーがわかります"></textarea>
+  <textarea id="copy-textarea" readonly placeholder="ここをコピーしてChatGPTにペーストすると概算カロリーがわかります"></textarea>
   <button id="copy-all-btn">全部コピー</button>
-  <button id="open-chatgpt">チャッピーにカロリーについて聞いてみる。</button>
+  <button id="open-chatgpt">ChatGPTにカロリーについて聞いてみる。</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 const dateInput = document.getElementById('date-input');
+const bmrInput = document.getElementById('bmr-input');
 const mealInput = document.getElementById('meal-input');
 const calorieInput = document.getElementById('calorie-input');
 const burncalInput = document.getElementById('burncal-input');
@@ -155,13 +160,13 @@ const copyTextarea = document.getElementById('copy-textarea');
 const copyAllBtn = document.getElementById('copy-all-btn');
 const openChatGPTBtn = document.getElementById('open-chatgpt');
 const filterDateInput = document.getElementById('filter-date');
-const ctx = document.getElementById('weightChart').getContext('2d');
+const weightCtx = document.getElementById('weightChart').getContext('2d');
+const calorieDiffCtx = document.getElementById('calorieDiffChart').getContext('2d');
 const calorieDiffElem = document.getElementById('calorie-diff');
-const BASAL_METABOLISM = 1200;
 
 let records = [];
 let editIndex = null;
-let chart;
+let weightChart, calorieDiffChart;
 
 function saveRecords() { localStorage.setItem('dietRecords', JSON.stringify(records)); }
 const saved = localStorage.getItem('dietRecords');
@@ -172,13 +177,14 @@ function formatDate(dateStr){ if(!dateStr) return ''; return new Date(dateStr).t
 function renderRecords(filterDate=''){
   recordList.innerHTML = '';
   let filtered = filterDate ? records.filter(r=>r.date===filterDate) : [...records];
-  filtered.sort((a,b)=>b.date.localeCompare(a.date)); // 降順
-  filtered = filtered.slice(0,3); // 最新3日分
+  filtered.sort((a,b)=>b.date.localeCompare(a.date));
+  const latest3 = filtered.slice(0,3);
 
-  filtered.forEach((rec,i)=>{
+  latest3.forEach((rec,i)=>{
     const li = document.createElement('li');
     li.innerHTML = `
       <strong>${formatDate(rec.date)}</strong><br/>
+      基礎代謝: ${rec.bmr?rec.bmr+' kcal':'未入力'}<br/>
       食事: ${rec.meal}<br/>
       カロリー: ${rec.calorie?rec.calorie+' kcal':'未入力'}<br/>
       消費: ${rec.burncal?rec.burncal+' kcal':'-'}<br/>
@@ -190,4 +196,133 @@ function renderRecords(filterDate=''){
     recordList.appendChild(li);
   });
 
-  updateCopy
+  updateCopyText(latest3);
+  updateWeightChart(latest3);
+  updateCalorieDiffChart();
+  updateCalorieDiff();
+}
+
+function updateCopyText(data){
+  if(data.length===0){ copyTextarea.value=''; return; }
+  const sorted = [...data].sort((a,b)=>b.date.localeCompare(a.date));
+  const latestDate = sorted[0].date;
+  const latestRecords = data.filter(r=>r.date===latestDate);
+  let text = latestRecords.map(r=>{
+    return `${formatDate(r.date)} 食事: ${r.meal} (${r.calorie?r.calorie+' kcal':'カロリー未入力'})`+
+           `${r.burncal?' 消費: '+r.burncal+' kcal':''} 体重: ${r.weight?r.weight+' kg':'未入力'} メモ: ${r.memo||'-'}`;
+  }).join('\n');
+  copyTextarea.value = text;
+}
+
+function updateWeightChart(data){
+  const dateMap = {};
+  data.forEach(r=>{
+    if(r.weight){
+      if(!dateMap[r.date] || new Date(r.date)>new Date(dateMap[r.date].time)){
+        dateMap[r.date]={weight:parseFloat(r.weight), time:r.date};
+      }
+    }
+  });
+  const sortedDates = Object.keys(dateMap).sort((a,b)=>new Date(a)-new Date(b));
+  const labels = sortedDates.map(d=>formatDate(d));
+  const weights = sortedDates.map(d=>dateMap[d].weight);
+  if(weightChart) weightChart.destroy();
+  weightChart = new Chart(weightCtx,{
+    type:'line',
+    data:{ labels, datasets:[{ label:'体重 (kg)', data:weights, borderColor:'#3498db', backgroundColor:'rgba(52,152,219,0.2)', fill:true, tension:0.1 }]},
+    options:{ responsive:true, scales:{ y:{ beginAtZero:false }}}
+  });
+}
+
+function updateCalorieDiff(){
+  const today = new Date().toISOString().split('T')[0];
+  const todayRecords = records.filter(r=>r.date===today);
+  if(todayRecords.length===0){ calorieDiffElem.textContent='今日の摂取カロリーと基礎代謝との差をここに表示'; return; }
+  let totalCal = todayRecords.reduce((sum,r)=>sum + (parseFloat(r.calorie)||0),0);
+  let bmr = parseFloat(todayRecords[0].bmr)||0;
+  let burn = todayRecords.reduce((sum,r)=>sum + (parseFloat(r.burncal)||0),0);
+  let diff = totalCal - bmr + burn;
+  calorieDiffElem.textContent=`摂取カロリー: ${totalCal} kcal / 消費: ${burn} kcal / 基礎代謝: ${bmr} kcal / 差: ${diff>=0?'+':'-'}${Math.abs(diff)} kcal`;
+}
+
+function updateCalorieDiffChart(){
+  const today = new Date().toISOString().split('T')[0];
+  const todayRecords = records.filter(r=>r.date===today);
+  if(todayRecords.length===0){
+    if(calorieDiffChart) calorieDiffChart.destroy();
+    return;
+  }
+  const totalCal = todayRecords.reduce((sum,r)=>sum + (parseFloat(r.calorie)||0),0);
+  const bmr = parseFloat(todayRecords[0].bmr)||0;
+  const burn = todayRecords.reduce((sum,r)=>sum + (parseFloat(r.burncal)||0),0);
+  const diff = totalCal - bmr + burn;
+
+  if(calorieDiffChart) calorieDiffChart.destroy();
+  calorieDiffChart = new Chart(calorieDiffCtx,{
+    type:'bar',
+    data:{
+      labels:['基礎代謝','消費カロリー','摂取カロリー','差'],
+      datasets:[{
+        label:'kcal',
+        data:[bmr,burn,totalCal,diff],
+        backgroundColor:['#3498db','#2ecc71','#f39c12','#e74c3c']
+      }]
+    },
+    options:{ responsive:true, scales:{ y:{ beginAtZero:true } } }
+  });
+}
+
+addRecordBtn.addEventListener('click',()=>{
+  const dateVal=dateInput.value;
+  const bmrVal=bmrInput.value.trim();
+  const mealVal=mealInput.value.trim();
+  const calorieVal=calorieInput.value.trim();
+  const burnVal=burncalInput.value.trim();
+  const weightVal=weightInput.value.trim();
+  const memoVal=memoInput.value.trim();
+
+  if(!dateVal){ alert('日付を選んでください'); return; }
+  if(!mealVal && !weightVal){ alert('食事または体重のどちらかは入力してください'); return; }
+
+  if(editIndex!==null){
+    records[editIndex]={date:dateVal,bmr:bmrVal,meal:mealVal,calorie:calorieVal,burncal:burnVal,weight:weightVal,memo:memoVal};
+    editIndex=null;
+    addRecordBtn.textContent='記録を追加';
+  } else {
+    records.push({date:dateVal,bmr:bmrVal,meal:mealVal,calorie:calorieVal,burncal:burnVal,weight:weightVal,memo:memoVal});
+  }
+
+  saveRecords();
+  dateInput.value=''; bmrInput.value=''; mealInput.value=''; calorieInput.value=''; burncalInput.value=''; weightInput.value=''; memoInput.value='';
+  renderRecords(filterDateInput.value);
+});
+
+recordList.addEventListener('click',(e)=>{
+  if(e.target.classList.contains('delete-btn')){
+    const idx=e.target.dataset.index;
+    if(confirm('この記録を削除しますか？')){ records.splice(idx,1); saveRecords(); renderRecords(filterDateInput.value);}
+  } else if(e.target.classList.contains('edit-btn')){
+    const idx=e.target.dataset.index;
+    const rec=records[idx];
+    dateInput.value=rec.date; bmrInput.value=rec.bmr; mealInput.value=rec.meal; calorieInput.value=rec.calorie;
+    burncalInput.value=rec.burncal; weightInput.value=rec.weight; memoInput.value=rec.memo;
+    editIndex=idx;
+    addRecordBtn.textContent='編集を保存';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+});
+
+copyAllBtn.addEventListener('click',()=>{
+  copyTextarea.select();
+  document.execCommand('copy');
+  alert('最新の日付の記録をコピーしました！');
+});
+
+openChatGPTBtn.addEventListener('click',()=>{ window.open('https://chat.openai.com/','_blank'); });
+filterDateInput.addEventListener('change',()=>{ renderRecords(filterDateInput.value); });
+
+renderRecords();
+</script>
+
+</body>
+</html>
